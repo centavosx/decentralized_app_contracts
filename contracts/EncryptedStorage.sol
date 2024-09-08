@@ -79,9 +79,7 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
 
         (bool success, ) = owner.call{value: msg.value}("");
 
-        payable(owner).transfer(msg.value);
         require(success, "Transfer failed");
-
 
         if (authorizedUsers[signer] == 0) {
             users.push(signer);
