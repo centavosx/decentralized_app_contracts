@@ -135,7 +135,6 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
         }));
     }
 
-
     /**
      * @dev Public function to remove data by Id
      */
@@ -145,7 +144,6 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
         uint256 id = idBytes.toUint256();
         storedData[msg.sender].removeElement(id);
     }
-
 
     /**
      * @dev Public function to get all stored data
