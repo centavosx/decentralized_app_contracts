@@ -51,4 +51,16 @@ library DataArray {
             }
         }
     }
+
+
+    /**
+     * @dev Used to paginate or get data based on offset and limit
+     */
+    function getOffset(Data[] storage data, uint256 offset, uint8 limit) internal view returns (Data[] memory) {
+        Data[] memory searchData = new Data[](limit);
+        for (uint256 currentIndex = offset; currentIndex < offset + limit; currentIndex++) {
+            searchData[currentIndex - offset] = data[currentIndex];
+        }
+        return searchData;
+    }
 }

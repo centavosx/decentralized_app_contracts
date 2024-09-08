@@ -16,7 +16,7 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
     mapping (address => Data[]) private storedData;
     mapping (address => uint256) private currentAddressStoredIds;
     mapping (address => uint256) private authorizedUsers;
-
+    
     uint256 private subscriptionAmount = 0.001 ether;
 
     constructor(address initialOwner) Ownable(initialOwner) {}
@@ -152,7 +152,11 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
     /**
      * @dev Public function to get all stored data
      */
-    function getStoredPasswords() public isSubscribed view returns (Data[] memory)  {
-        return storedData[msg.sender];
+    function getStoredPasswords(uint256 offset, uint8 limit) public isSubscribed view returns (Data[] memory)  {
+        require(limit > 0 && limit <= 255, "Limit should be greater than zero and less than or equals 255");
+
+        Data[] storage currentData = storedData[msg.sender];
+
+        return currentData.getOffset(offset, limit);
     }
 }
