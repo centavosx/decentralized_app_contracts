@@ -22,25 +22,6 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
     constructor(address initialOwner) Ownable(initialOwner) {}
     
     /**
-     * @dev A modifier to check if signature is valid
-     */
-    modifier isSignatureValid(
-        bytes32 messageHash,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) {
-        // Recover the address from the signature
-        address recoveredAddress = ecrecover(messageHash, v, r, s);
-
-        // Ensure the recovered address matches the expected signer
-        require(recoveredAddress == msg.sender, "Not a valid signer");
-
-        // Continue with the function execution
-        _;
-    }
-    
-    /**
      * @dev A modifier to check if the address is already subscribed.
      * It will check if time is greater than the current timestamp.
      */
@@ -92,16 +73,10 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
      * @dev Public function to store or update data
      */
     function storeOrUpdate(
-        bytes32 messageHash,
-        uint8 v,
-        bytes32 r,  
-        bytes32 s,
         bytes memory id,
-        bytes memory name,
-        bytes memory value,
-        bytes memory description
-    ) public isSubscribed isSignatureValid(messageHash, v, r, s)  {
-        bool isValidHex = value.isValidAes256Hexadecimal();
+        StoredData memory data
+    ) public isSubscribed {
+        bool isValidHex = data.value.isValidAes256Hexadecimal();
         require(isValidHex, "Not a valid hexadecimal value");
 
         address signer = msg.sender;
@@ -113,11 +88,7 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
             currentData.push(
                 Data({
                     id: currentId,
-                    data: StoredData({
-                        name: name,
-                        value: value,
-                        description: description
-                    }),
+                    data: data,
                     created: block.timestamp,
                     modified: block.timestamp
                 })
@@ -128,11 +99,7 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
 
         (currentId) = id.toUint256();
 
-        currentData.updateElement(currentId, StoredData({
-            name: name,
-            value: value,
-            description: description
-        }));
+        currentData.updateElement(currentId, data);
     }
 
     /**
