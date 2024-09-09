@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "../libraries/Data.sol";
 import "../libraries/Bytes.sol";
 
-
 contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
 
     using DataArray for Data[];
@@ -38,8 +37,13 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
         subscriptionAmount = amountInWei;
     }
 
+    function renounceOwnership() public view override onlyOwner {
+        require(false, "NOT APPLICABLE");
+    }
+
     // NOTE: Remove in production/mainnet use
     function clearAllData() public onlyOwner {
+        
         for (uint256 i = 0; i<users.length; i++) {
             address userAddress = users[i];
             delete storedData[userAddress];
@@ -50,24 +54,35 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
         delete users;
     }
 
+    /**
+     * @dev Public function to subscribe to this contract
+     */
     function subscribe() external nonReentrant payable {
         address owner = owner();
         address signer = msg.sender;
 
         uint256 time = authorizedUsers[signer];
-        require(time < block.timestamp && signer != owner, "You are already subscribed.");
-        require(msg.value == subscriptionAmount, "Insufficient amount (0.001 ETH)");
+        bool isEmptyTime = time == 0;
+        bool isOwner = signer == owner;
 
-        (bool success, ) = owner.call{value: msg.value}("");
+        require(!isOwner && (time < block.timestamp || isEmptyTime), "You are already subscribed.");
 
-        require(success, "Transfer failed");
-
-        if (authorizedUsers[signer] == 0) {
+        if (isEmptyTime) {
             users.push(signer);
         }
-        
-        authorizedUsers[signer] = block.timestamp + 30 days;
+
+        if (!isEmptyTime) {
+            require(msg.value == subscriptionAmount, "Insufficient amount (0.001 ETH)");
+            (bool success, ) = owner.call{value: msg.value}("");
+            require(success, "Transfer failed");
+            authorizedUsers[signer] = block.timestamp + 30 days;
+            return;
+        }
+
+        // 3 days trial for new users
+        authorizedUsers[signer] = block.timestamp + 3 days;
     }
+    
 
     /**
      * @dev Public function to store or update data
