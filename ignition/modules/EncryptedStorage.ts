@@ -1,8 +1,17 @@
 import {buildModule} from '@nomicfoundation/hardhat-ignition/modules';
 
 const EncryptedStorageModule = buildModule('EncryptedStorage', (module) => {
-  // Replace with actual address
-  const encryptedStorage = module.contract('EncryptedStorage', ['ADDRESS']);
+  let currentAddress = process.env.WALLET_ADDRESS;
+
+  if (process.env.NODE_ENV !== 'production') {
+    currentAddress = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
+  }
+
+  if (!currentAddress) throw new Error('Address not available');
+
+  const encryptedStorage = module.contract('EncryptedStorage', [
+    currentAddress,
+  ]);
 
   return {encryptedStorage};
 });

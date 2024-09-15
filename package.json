@@ -5,9 +5,9 @@
   "author": "centavosx",
   "license": "MIT",
   "scripts": {
-    "node": "npx hardhat node",
+    "node:run": "npx hardhat node",
     "test": "npx hardhat test",
-    "deploy:encryptedStorage:dev": "npx hardhat ignition deploy ./ignition/modules/EncryptedStorage.ts --network localhost"
+    "deploy:encryptedStorage:dev": "cross-env NODE_ENV=development npx hardhat ignition deploy ./ignition/modules/EncryptedStorage.ts --network localhost"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.0.2",
@@ -32,6 +32,7 @@
     "@types/node": "^22.5.4",
     "@types/randomstring": "^1.3.0",
     "chai": "^4.2.0",
+    "cross-env": "^7.0.3",
     "hardhat": "^2.22.10",
     "hardhat-gas-reporter": "^1.0.8",
     "prettier": "^3.3.3",
