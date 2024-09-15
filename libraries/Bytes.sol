@@ -25,7 +25,6 @@ library Bytes {
             }
         }
 
-        // If hex string is divisible by 32 it means that it is a valid aes256 hex
-        return input.length % 32 == 0 && input.length > 0;
+        return input.length > 0;
     }
 }

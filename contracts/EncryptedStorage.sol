@@ -71,8 +71,11 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
             users.push(signer);
         }
 
-        if (!isEmptyTime) {
-            require(msg.value == subscriptionAmount, "Insufficient amount (0.001 ETH)");
+        bool hasSufficientAmount = msg.value == subscriptionAmount;
+
+        // User will automatically subscribe if they pay for it even without having to use the free trial.
+        if (!isEmptyTime || hasSufficientAmount) {
+            require(hasSufficientAmount, "Insufficient amount (0.001 ETH)");
             (bool success, ) = owner.call{value: msg.value}("");
             require(success, "Transfer failed");
             authorizedUsers[signer] = block.timestamp + 30 days;

@@ -7,6 +7,10 @@ import {AssertionError, expect} from 'chai';
 import hre, {ethers} from 'hardhat';
 import {EncryptedStorage} from '../typechain-types';
 import {HardhatEthersSigner} from '@nomicfoundation/hardhat-ethers/signers';
+import Cryptr from 'cryptr';
+import randomString from 'randomstring';
+import {ContractTransactionResponse} from 'ethers';
+import {DataStructOutput} from '../typechain-types/contracts/EncryptedStorage';
 
 describe('Encrypted Storage', function () {
   // We define a fixture to reuse the same setup in every test.
@@ -131,9 +135,8 @@ describe('Encrypted Storage', function () {
     });
 
     it('Should be able to subscribe for free trial for three days', async () => {
-      await encryptedStorage.connect(subscriber).subscribe({
-        value: ethers.parseEther('0.001'),
-      });
+      const data = await encryptedStorage.connect(subscriber).subscribe();
+      expect(data).instanceOf(ContractTransactionResponse);
       await time.increase(259200); // Increased to 3 days
     });
 
@@ -155,9 +158,10 @@ describe('Encrypted Storage', function () {
     });
 
     it('Should be able to subscribe', async () => {
-      await encryptedStorage.connect(subscriber).subscribe({
+      const data = await encryptedStorage.connect(subscriber).subscribe({
         value: ethers.parseEther('0.001'),
       });
+      expect(data).instanceOf(ContractTransactionResponse);
     });
 
     it('Should not be able to subscribe multiple times', async () => {
@@ -165,6 +169,7 @@ describe('Encrypted Storage', function () {
         await encryptedStorage.connect(subscriber).subscribe({
           value: ethers.parseEther('0.001'),
         });
+        expect.fail();
       } catch (err) {
         expect(err).not.instanceOf(
           AssertionError,
@@ -174,5 +179,211 @@ describe('Encrypted Storage', function () {
     });
   });
 
-  describe('Store and update', function () {});
+  describe('Get Store and update', function () {
+    let encryptedStorage: EncryptedStorage;
+    let subscriber: HardhatEthersSigner;
+    let unsubscribedUser: HardhatEthersSigner;
+    let owner: HardhatEthersSigner;
+    let randomPrivateKey: string;
+    let randomStrings: string[];
+
+    this.beforeAll(async () => {
+      let {
+        encryptedStorage: _encryptedStorage,
+        owner: _owner,
+        otherAccounts: _otherAccounts,
+      } = await loadFixture(deploy);
+
+      encryptedStorage = _encryptedStorage;
+      subscriber = _otherAccounts[0];
+      unsubscribedUser = _otherAccounts[1];
+      owner = _owner;
+      const wallet = ethers.Wallet.createRandom();
+      randomPrivateKey = wallet.privateKey;
+
+      await encryptedStorage.connect(subscriber).subscribe({
+        value: ethers.parseEther('0.001'),
+      });
+
+      randomStrings = Array(5)
+        .fill(null)
+        .map(() => randomString.generate());
+    });
+
+    describe('storeOrUpdate (Saving)', () => {
+      it('Should throw an error when passing non bytes value', async () => {
+        const data = [
+          ['0x', {name: 'one', description: 'two', value: 'three'}],
+          [
+            'test',
+            {
+              name: ethers.toUtf8Bytes('test'),
+              description: ethers.toUtf8Bytes('test'),
+              value: ethers.toUtf8Bytes('test'),
+            },
+          ],
+          [
+            '0x',
+            {
+              name: ethers.toUtf8Bytes('test'),
+              description: 'test',
+              value: 'test',
+            },
+          ],
+          [
+            '0x',
+            {
+              name: 'test',
+              description: ethers.toUtf8Bytes('test'),
+              value: 'test',
+            },
+          ],
+        ];
+
+        for (const value of data) {
+          try {
+            await encryptedStorage
+              .connect(subscriber)
+              .storeOrUpdate(...(value as any));
+            expect.fail();
+          } catch (error) {
+            expect(error).not.instanceOf(AssertionError);
+            expect(error).instanceOf(TypeError);
+          }
+        }
+      });
+      it('Should not be able to store invalid aes256 value', async () => {
+        try {
+          await encryptedStorage.connect(subscriber).storeOrUpdate('0x', {
+            name: ethers.toUtf8Bytes('name'),
+            description: ethers.toUtf8Bytes('description'),
+            value: ethers.toUtf8Bytes('encryptedValue'),
+          });
+          expect.fail();
+        } catch (err) {
+          expect(err).not.instanceOf(AssertionError);
+          expect(err).instanceOf(Error);
+          expect((err as Error).message).includes(
+            'Not a valid hexadecimal value'
+          );
+        }
+      });
+      it('Should not be able to store for unsubscribed user', async () => {
+        try {
+          await encryptedStorage.connect(unsubscribedUser).storeOrUpdate('0x', {
+            name: ethers.toUtf8Bytes('name'),
+            description: ethers.toUtf8Bytes('description'),
+            value: ethers.toUtf8Bytes('encryptedValue'),
+          });
+          expect.fail();
+        } catch (err) {
+          expect(err).not.instanceOf(AssertionError);
+          expect(err).instanceOf(Error);
+          expect((err as Error).message).includes('You are not subscribed');
+        }
+      });
+      it('Should be able to store values', async () => {
+        const cryptr = new Cryptr(randomPrivateKey);
+        for (const value of randomStrings) {
+          const data = await encryptedStorage
+            .connect(owner)
+            .storeOrUpdate('0x', {
+              name: ethers.toUtf8Bytes('name'),
+              description: ethers.toUtf8Bytes('description'),
+              value: ethers.toUtf8Bytes(cryptr.encrypt(value)),
+            });
+          expect(data).instanceOf(ContractTransactionResponse);
+          const subscriberData = await encryptedStorage
+            .connect(subscriber)
+            .storeOrUpdate('0x', {
+              name: ethers.toUtf8Bytes('name'),
+              description: ethers.toUtf8Bytes('description'),
+              value: ethers.toUtf8Bytes(cryptr.encrypt(value)),
+            });
+          expect(subscriberData).instanceOf(ContractTransactionResponse);
+        }
+      });
+    });
+    describe('getStoredPasswords', () => {
+      it('Should throw an error when passing non uint256 values', async () => {
+        try {
+          await encryptedStorage
+            .connect(subscriber)
+            .getStoredPasswords('Test', 'test');
+          await encryptedStorage
+            .connect(subscriber)
+            .getStoredPasswords(0, 'test');
+          await encryptedStorage
+            .connect(subscriber)
+            .getStoredPasswords('test', 1);
+          expect.fail();
+        } catch (err) {
+          expect(err).not.instanceOf(AssertionError);
+          expect(err).instanceOf(TypeError);
+        }
+      });
+      it('Should not be get values for unsubscribed user', async () => {
+        try {
+          await encryptedStorage
+            .connect(unsubscribedUser)
+            .getStoredPasswords(0, 1);
+          expect.fail();
+        } catch (err) {
+          expect(err).not.instanceOf(AssertionError);
+          expect(err).instanceOf(Error);
+          expect((err as Error).message).includes('You are not subscribed');
+        }
+      });
+      it('Should not be able get values over 255 limit', async () => {
+        try {
+          await encryptedStorage.connect(subscriber).getStoredPasswords(0, 256);
+          await encryptedStorage
+            .connect(subscriber)
+            .getStoredPasswords(0, 1000);
+          await encryptedStorage.connect(subscriber).getStoredPasswords(0, 500);
+          expect.fail();
+        } catch (err) {
+          expect(err).instanceOf(TypeError);
+          expect((err as TypeError).message).includes('value out-of-bounds');
+        }
+      });
+      it('Should be able get values and return the actual data', async () => {
+        const limit = 2;
+        const cryptr = new Cryptr(randomPrivateKey);
+
+        const check = async (
+          currentSubscriber: HardhatEthersSigner,
+          pageIndex: number,
+          currentStrings: string[]
+        ) => {
+          const data = await encryptedStorage
+            .connect(currentSubscriber)
+            .getStoredPasswords(pageIndex, limit);
+
+          expect(data.length).equal(currentStrings.length);
+
+          for (let index in data) {
+            const currentData = data[index];
+            const currentString = currentStrings[index];
+            const byteStringValue = currentData?.[1]?.[1];
+            expect(typeof byteStringValue).equal('string');
+            const decodedString = ethers.toUtf8String(byteStringValue);
+            const decryptedData = cryptr.decrypt(decodedString);
+            expect(decryptedData).equals(currentString);
+          }
+        };
+
+        for (let pageIndex = 0; pageIndex < 10; pageIndex++) {
+          const currentPageOffset = pageIndex * limit;
+          const currentStrings = randomStrings.slice(
+            currentPageOffset,
+            currentPageOffset + limit
+          );
+
+          await check(subscriber, pageIndex, currentStrings);
+          await check(owner, pageIndex, currentStrings);
+        }
+      });
+    });
+  });
 });
