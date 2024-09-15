@@ -6,7 +6,7 @@
   "license": "MIT",
   "scripts": {
     "node:run": "npx hardhat node",
-    "test": "npx hardhat test",
+    "test": "npx hardhat test --typecheck",
     "deploy:encryptedStorage:dev": "cross-env NODE_ENV=development npx hardhat ignition deploy ./ignition/modules/EncryptedStorage.ts --network localhost"
   },
   "dependencies": {
