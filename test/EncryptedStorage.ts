@@ -108,6 +108,7 @@ describe('Encrypted Storage', function () {
     let encryptedStorage: EncryptedStorage;
     let subscriber: HardhatEthersSigner;
     let owner: HardhatEthersSigner;
+    let nonSubscriber: HardhatEthersSigner;
 
     this.beforeAll(async () => {
       let {
@@ -117,6 +118,7 @@ describe('Encrypted Storage', function () {
       } = await loadFixture(deploy);
       encryptedStorage = _encryptedStorage;
       subscriber = _otherAccounts[0];
+      nonSubscriber = _otherAccounts[1];
       owner = _owner;
     });
 
@@ -176,6 +178,34 @@ describe('Encrypted Storage', function () {
           `Wallet ${subscriber.address} should not be able to subscribe again`
         );
       }
+    });
+
+    it('Should be able to change subscription amount for non owner', async () => {
+      try {
+        await encryptedStorage
+          .connect(subscriber)
+          .changeSubscriptionAmount(
+            ethers.zeroPadBytes(ethers.toBeArray(2), 32)
+          );
+        expect.fail();
+      } catch (err) {
+        expect(err).not.instanceOf(AssertionError);
+        expect((err as Error).message).includes('OwnableUnauthorizedAccount');
+      }
+    });
+
+    it('Should be able to change subscription amount for owner', async () => {
+      const currentFee = ethers.parseEther('0.002');
+      const result = await encryptedStorage
+        .connect(owner)
+        .changeSubscriptionAmount(
+          ethers.zeroPadBytes(ethers.toBeArray(currentFee), 32)
+        );
+      expect(result).instanceOf(ContractTransactionResponse);
+      const result2 = await encryptedStorage
+        .connect(nonSubscriber)
+        .subscribe({value: currentFee});
+      expect(result2).instanceOf(ContractTransactionResponse);
     });
   });
 
@@ -383,6 +413,182 @@ describe('Encrypted Storage', function () {
           await check(subscriber, pageIndex, currentStrings);
           await check(owner, pageIndex, currentStrings);
         }
+      });
+    });
+
+    describe('storeOrUpdate (Updating)', () => {
+      it('Should throw an error when passing non bytes value', async () => {
+        const data = await encryptedStorage
+          .connect(subscriber)
+          .getStoredPasswords(0, 10);
+
+        for (const value of data) {
+          const [id] = value;
+          const bytesStringId = '0x' + id.toString(16);
+          try {
+            await encryptedStorage
+              .connect(subscriber)
+              .storeOrUpdate(bytesStringId, {
+                name: 'd',
+                description: 'd',
+                value: 'd',
+              });
+            expect.fail();
+          } catch (error) {
+            expect(error).not.instanceOf(AssertionError);
+            expect(error).instanceOf(TypeError);
+          }
+        }
+      });
+      it('Should not be able to store invalid aes256 value', async () => {
+        const data = await encryptedStorage
+          .connect(subscriber)
+          .getStoredPasswords(0, 10);
+
+        for (const value of data) {
+          const [id] = value;
+          const bytesId = ethers.zeroPadBytes(ethers.toBeArray(id), 32);
+
+          try {
+            await encryptedStorage.connect(subscriber).storeOrUpdate(bytesId, {
+              name: ethers.toUtf8Bytes('name'),
+              description: ethers.toUtf8Bytes('description'),
+              value: ethers.toUtf8Bytes('encryptedValue'),
+            });
+            expect.fail();
+          } catch (err) {
+            expect(err).not.instanceOf(AssertionError);
+            expect(err).instanceOf(Error);
+            expect((err as Error).message).includes(
+              'Not a valid hexadecimal value'
+            );
+          }
+        }
+      });
+      it('Should not be able to store for unsubscribed user', async () => {
+        try {
+          const data = await encryptedStorage
+            .connect(subscriber)
+            .getStoredPasswords(0, 1);
+
+          const currentData = data[0];
+          const [id] = currentData;
+          const bytesId = ethers.zeroPadBytes(ethers.toBeArray(id), 32);
+
+          await encryptedStorage
+            .connect(unsubscribedUser)
+            .storeOrUpdate(bytesId, {
+              name: ethers.toUtf8Bytes('name'),
+              description: ethers.toUtf8Bytes('description'),
+              value: ethers.toUtf8Bytes('encryptedValue'),
+            });
+
+          expect.fail();
+        } catch (err) {
+          expect(err).not.instanceOf(AssertionError);
+          expect(err).instanceOf(Error);
+          expect((err as Error).message).includes('You are not subscribed');
+        }
+      });
+      it('Should update user values', async () => {
+        const cryptr = new Cryptr(randomPrivateKey);
+        const data = await encryptedStorage
+          .connect(subscriber)
+          .getStoredPasswords(0, 10);
+
+        const currentUpdatedData = new Map<
+          BigInt,
+          {name: string; description: string; value: string}
+        >();
+
+        for (const value of data) {
+          const [id] = value;
+          const bytesId = ethers.zeroPadValue(ethers.toBeArray(id), 32);
+          const updatedName = randomString.generate();
+          const updatedDescription = randomString.generate();
+          const updatedValue = randomString.generate();
+
+          const result = await encryptedStorage
+            .connect(subscriber)
+            .storeOrUpdate(bytesId, {
+              name: ethers.toUtf8Bytes(updatedName),
+              description: ethers.toUtf8Bytes(updatedDescription),
+              value: ethers.toUtf8Bytes(cryptr.encrypt(updatedValue)),
+            });
+
+          expect(result).instanceOf(ContractTransactionResponse);
+
+          currentUpdatedData.set(id, {
+            name: updatedName,
+            description: updatedDescription,
+            value: updatedValue,
+          });
+        }
+
+        const updatedData = await encryptedStorage
+          .connect(subscriber)
+          .getStoredPasswords(0, 10);
+
+        for (const item of updatedData) {
+          const [id, data] = item;
+          const [name, value, description] = data;
+          const decodedName = ethers.toUtf8String(name);
+          const decodedDescription = ethers.toUtf8String(description);
+          const decodedValue = ethers.toUtf8String(value);
+
+          const decryptedValue = cryptr.decrypt(decodedValue);
+
+          const currentData = currentUpdatedData.get(id);
+
+          expect(currentData?.name).equal(decodedName);
+          expect(currentData?.description).equal(decodedDescription);
+          expect(currentData?.value).equal(decryptedValue);
+        }
+      });
+    });
+
+    describe('removeData', () => {
+      it('Should throw an error when passing non bytes32 value', async () => {
+        try {
+          await encryptedStorage.connect(subscriber).removeData('0');
+          expect.fail();
+        } catch (error) {
+          expect(error).not.instanceOf(AssertionError);
+          expect(error).instanceOf(TypeError);
+        }
+      });
+      it('Should not be able to remove for unsubscribed user', async () => {
+        try {
+          const bytesId = ethers.zeroPadBytes(ethers.toBeArray(1), 32);
+          await encryptedStorage.connect(unsubscribedUser).removeData(bytesId);
+          expect.fail();
+        } catch (err) {
+          expect(err).not.instanceOf(AssertionError);
+          expect(err).instanceOf(Error);
+          expect((err as Error).message).includes('You are not subscribed');
+        }
+      });
+      it('Should remove user data', async () => {
+        const data = await encryptedStorage
+          .connect(subscriber)
+          .getStoredPasswords(0, 10);
+
+        for (const value of data) {
+          const [id] = value;
+          const bytesId = ethers.zeroPadValue(ethers.toBeArray(id), 32);
+
+          const result = await encryptedStorage
+            .connect(subscriber)
+            .removeData(bytesId);
+
+          expect(result).instanceOf(ContractTransactionResponse);
+        }
+
+        const updatedData = await encryptedStorage
+          .connect(subscriber)
+          .getStoredPasswords(0, 10);
+
+        expect(updatedData.length).equals(0);
       });
     });
   });

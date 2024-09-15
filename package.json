@@ -5,9 +5,9 @@
   "author": "centavosx",
   "license": "MIT",
   "scripts": {
-    "build": "tsc",
-    "start": "node ./bin/app.js",
-    "dev": "ts-node ./src/app.ts"
+    "node": "npx hardhat node",
+    "test": "npx hardhat test",
+    "deploy:encryptedStorage:dev": "npx hardhat ignition deploy ./ignition/modules/EncryptedStorage.ts --network localhost"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.0.2",

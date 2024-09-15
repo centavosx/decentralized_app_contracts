@@ -10,6 +10,7 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
 
     using DataArray for Data[];
     using Bytes for bytes;
+    using Bytes32 for bytes32;
 
     address[] private users;
     mapping (address => Data[]) private storedData;
@@ -32,7 +33,7 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
     }
 
 
-    function changeSubscriptionAmount(bytes memory amountInWeiBytes) public onlyOwner {
+    function changeSubscriptionAmount(bytes32 amountInWeiBytes) public onlyOwner {
         uint256 amountInWei = amountInWeiBytes.toUint256();
         subscriptionAmount = amountInWei;
     }
@@ -43,7 +44,6 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
 
     // NOTE: Remove in production/mainnet use
     function clearAllData() public onlyOwner {
-        
         for (uint256 i = 0; i<users.length; i++) {
             address userAddress = users[i];
             delete storedData[userAddress];
@@ -112,10 +112,10 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
                 })
             );
             currentAddressStoredIds[signer] += 1;
-            return;
         }
 
-        (currentId) = id.toUint256();
+        bytes32 converted = id.toBytes32();
+        (currentId) = converted.toUint256();
 
         currentData.updateElement(currentId, data);
     }
@@ -124,7 +124,7 @@ contract EncryptedStorage is Ownable2Step, ReentrancyGuard {
      * @dev Public function to remove data by Id
      */
     function removeData (
-        bytes memory idBytes
+        bytes32 idBytes
     ) public isSubscribed {
         uint256 id = idBytes.toUint256();
         storedData[msg.sender].removeElement(id);
