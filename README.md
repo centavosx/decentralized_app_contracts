@@ -1,7 +1,5 @@
 # Smart contracts
 
-This repo contains all smart contracts that I used for my application.
-
 ## EncryptedStorage
 
 This smart contract is designed to store encrypted values securely.
